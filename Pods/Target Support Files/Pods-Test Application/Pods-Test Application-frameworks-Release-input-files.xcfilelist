@@ -1,0 +1,3 @@
+${PODS_ROOT}/Target Support Files/Pods-Test Application/Pods-Test Application-frameworks.sh
+${PODS_ROOT}/onnxruntime/onnxruntime.framework
+${BUILT_PRODUCTS_DIR}/onnxruntime-objc/onnxruntime_objc.framework

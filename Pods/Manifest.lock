@@ -1,0 +1,22 @@
+PODS:
+  - onnxruntime (1.7.0)
+  - onnxruntime-objc (1.7.0):
+    - onnxruntime-objc/Core (= 1.7.0)
+  - onnxruntime-objc/Core (1.7.0):
+    - onnxruntime (= 1.7.0)
+
+DEPENDENCIES:
+  - onnxruntime-objc
+
+SPEC REPOS:
+  https://github.com/edgchen1/test-pod-specs.git:
+    - onnxruntime
+    - onnxruntime-objc
+
+SPEC CHECKSUMS:
+  onnxruntime: a54f0a3184c95ef560cbb8c0fcab6b1213d2b27b
+  onnxruntime-objc: ffd7d3c2838c0a68f5ac922934e49bab82121511
+
+PODFILE CHECKSUM: b9cce56be5a1eaa997305d80b2558e2b7e2f502a
+
+COCOAPODS: 1.10.1
