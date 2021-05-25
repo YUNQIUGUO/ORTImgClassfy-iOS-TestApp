@@ -1,8 +1,14 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
 //
 //  ViewController.swift
 //  TestApplication
-//
-//  Created by rachguo on 5/20/21.
 //
 
 import UIKit
@@ -23,7 +29,7 @@ class ViewController: UIViewController {
     private var inferenceViewController: InferenceViewController?
     
     // Handles all model data preprocessing and makes calls to run inference
-    private var modelHandler: ModelHandler? = try! ModelHandler(modelFileInfo: MobileNet.modelInfo)
+    private var modelHandler: ModelHandler? = ModelHandler()
     
     // MARK: View Controller Life Cycle
     override func viewDidLoad() {
@@ -77,14 +83,7 @@ extension ViewController: InferenceViewControllerDelegate {
 
       func didChangeThreadCount(to count: Int32) {
         if modelHandler?.threadCount == count { return }
-        do {
-            modelHandler = try ModelHandler(
-              modelFileInfo: MobileNet.modelInfo,
-              threadCount: count
-            )
-        } catch {
-            print("Failed to initialize a ModelHandler instance.")
-        }
+        modelHandler = ModelHandler(threadCount: count)
       }
 }
 
@@ -123,7 +122,7 @@ extension ViewController: CameraManagerDelegate {
         previousInferenceTimeMs = currentTimeMs
 
         // Pass the pixel buffer to TensorFlow Lite to perform inference.
-        result = try! modelHandler?.runModel(onFrame: pixelBuffer)
+        result = try! modelHandler?.runModel(onFrame: pixelBuffer, modelFileInfo: (name: "mobilenet_v2_float", extension: "ort"))
 
         // Display results by handing off to the InferenceViewController.
         DispatchQueue.main.async {
@@ -135,4 +134,3 @@ extension ViewController: CameraManagerDelegate {
     }
     
 }
-

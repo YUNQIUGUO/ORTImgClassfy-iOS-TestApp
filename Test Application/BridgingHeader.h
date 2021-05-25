@@ -1,8 +1,8 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
 //
 //  BridgingHeader.h
 //  Test Application
-//
-//  Created by rachguo on 5/24/21.
 //
 
 #ifndef BridgingHeader_h

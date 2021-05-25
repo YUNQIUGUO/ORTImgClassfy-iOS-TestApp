@@ -1,9 +1,17 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//    http://www.apache.org/licenses/LICENSE-2.0
 //
 //  ModelHandler.swift
 //  TestApplication
 //
-//  Created by rachguo on 5/20/21.
-//
+
+import Darwin
 import AVFoundation
 import CoreImage
 import UIKit
@@ -43,11 +51,14 @@ class ModelHandler {
     let inputWidth = 224
     let inputHeight = 224
     
-    /// `ORTSession` object for performin inference on a given model
-    private let session: ORTSession
-
-    // MARK: - Initialization
-    init?(modelFileInfo: FileInfo, threadCount: Int32 = 1) throws {
+    init?(threadCount: Int32 = 1) {
+        self.threadCount = threadCount
+    }
+    /**
+     This methods preprocess the image,  runs the ort inferencesession and processes the result
+     */
+    func runModel(onFrame pixelBuffer: CVPixelBuffer, modelFileInfo: FileInfo) throws -> Result? {
+        
         let modelFilename = modelFileInfo.name
         
         guard let modelPath = Bundle.main.path(
@@ -57,26 +68,6 @@ class ModelHandler {
             print("Failed to get model file path with name: \(modelFilename).")
             return nil
         }
-        
-        let env = try ORTEnv(loggingLevel: ORTLoggingLevel.warning)
-        let options = try ORTSessionOptions()
-        try options.setLogSeverityLevel(ORTLoggingLevel.verbose)
-        self.threadCount = threadCount
-        try options.setIntraOpNumThreads(threadCount) // TODO: check if calling the right methods
-        
-        do {
-            session = try ORTSession(env: env, modelPath: modelPath, sessionOptions: options)
-        } catch let error {
-            print("Failed to create an ORTSession. error: \(error.localizedDescription)")
-            return nil
-        }
-        
-    }
-    
-    /**
-     This methods preprocess the image,  runs the ort inferencesession and processes the result
-     */
-    func runModel(onFrame pixelBuffer: CVPixelBuffer) throws -> Result? {
         
         let sourcePixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
         assert(sourcePixelFormat == kCVPixelFormatType_32ARGB ||
@@ -91,14 +82,21 @@ class ModelHandler {
         guard let croppedPixelBuffer = preprocess(ofSize: scaledSize, pixelBuffer, imageChannels: imageChannels) else {
             return nil
         }
+        
+        ///Start the ORT inference environment
+        let env = try ORTEnv(loggingLevel: ORTLoggingLevel.warning)
+        let options = try ORTSessionOptions()
+        try options.setLogSeverityLevel(ORTLoggingLevel.verbose)
+        try options.setIntraOpNumThreads(self.threadCount) // TODO: check if calling the right methods
+
+        let session = try ORTSession(env: env, modelPath: modelPath, sessionOptions: options)
 
         let interval: TimeInterval
-        var detectedIndices = [Int]()
         var detectedScore = [Float]()
 
         let inputName = "input"
 
-        // Remove the alpha component from the image buffer to get the RGB data.
+        /// Remove the alpha component from the image buffer to get the RGB data.
         guard let rgbData = rgbDataFromBuffer(
             croppedPixelBuffer,
             byteCount: batchSize * inputWidth * inputHeight * inputChannels
@@ -110,33 +108,33 @@ class ModelHandler {
         let inputTensor = try ORTValue(tensorData: NSMutableData(data: rgbData),
                                        elementType: ORTTensorElementDataType.float,
                                        shape: [1, 3, 224, 224])
-//        // Run the ORT InferenceSession
-//        let startDate = Date()
-//        let outputs = try session.run(withInputs:[inputName: inputTensor],
-//                                      outputNames: ["output"],
-//                                      runOptions: try ORTRunOptions())
-//        interval = Date().timeIntervalSince(startDate) * 1000
-//
-//        guard let rawOutputValue = outputs["output"] else {
-//           throw OrtModelError.error("failed to get model output")
-//        }
-//        let rawOutputData = try rawOutputValue.tensorData() as Data
-//
-//
-//        guard let outputArr: [Float32] = arrayCopiedFromData(rawOutputData) else {
-//            throw OrtModelError.error("failed to copy output data")
-//        }
-//
-//        //Process the result(TopN), probabilities, etc.
-//        let probabilities = softMax(modelResult: outputArr)
-//        detectedIndices = getTop3(probabilities: probabilities)!
-//        for idx in detectedIndices {
-//            detectedScore.append(probabilities[idx])
-//        }
-//
-//        //Return ORT SessionRun result
-//        return Result(detectedIndices: detectedIndices, detectedScore: detectedScore, processTimeMs: interval)
-        return Result(detectedIndices: [0], detectedScore: [0.66], processTimeMs: 55)
+        /// Run ORT InferenceSession
+        let startDate = Date()
+        let outputs = try session.run(withInputs:[inputName: inputTensor],
+                                      outputNames: ["output"],
+                                      runOptions: try ORTRunOptions())
+        interval = Date().timeIntervalSince(startDate) * 1000
+
+        guard let rawOutputValue = outputs["output"] else {
+           throw OrtModelError.error("failed to get model output")
+        }
+        let rawOutputData = try rawOutputValue.tensorData() as Data
+
+        guard let outputArr: [Float32] = arrayCopiedFromData(rawOutputData) else {
+            throw OrtModelError.error("failed to copy output data")
+        }
+        //Process the result(TopN), probabilities, etc.
+        let probabilities = softMax(modelResult: outputArr)
+        guard let detectedIndices = getTop3(probabilities: probabilities) else {
+            print("No detected Indices found.")
+            return nil
+        }
+        for idx in detectedIndices {
+            detectedScore.append(probabilities[idx])
+        }
+
+        //Return ORT SessionRun result
+        return Result(detectedIndices: detectedIndices, detectedScore: detectedScore, processTimeMs: interval)
     }
     
     
@@ -222,14 +220,14 @@ class ModelHandler {
 
 /// Returns the top 3 inference results indice sorted in descending order.
 private func getTop3(probabilities: [Float32]) -> [Int]? {
-    var indices : [Int]?
+    var indices : [Int]? = []
     for _ in 1...3 {
-        var max : Float = 0.0
-        var idx = 0
+        var max : Float32 = 0.0
+        var idx : Int = 0
         for (i, prob) in probabilities.enumerated() {
             if (prob > max && indices?.contains(i) == false) {
-                max = prob
-                idx = i
+                    max = prob
+                    idx = i
             }
         }
         indices?.append(idx)
@@ -242,7 +240,7 @@ private func getTop3(probabilities: [Float32]) -> [Int]? {
 private func softMax(modelResult: [Float32]) -> [Float32] {
     var labelVals = modelResult
     let max = labelVals.max()
-    var sum : Float = 0.0
+    var sum : Float32 = 0.0
     
     for idx in labelVals.indices {
         labelVals[idx] = exp(labelVals[idx] - max!)
